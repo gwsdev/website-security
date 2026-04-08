@@ -1,0 +1,181 @@
+1) Main WordPress .htaccess file rules
+
+# SGS XMLRPC Disable Service
+<Files xmlrpc.php>
+	order deny,allow
+	deny from all
+</Files>
+# SGS XMLRPC Disable Service END
+# ==================================================
+# WORDPRESS SECURITY + PERFORMANCE HARDENING
+# ==================================================
+
+# Disable directory browsing
+Options -Indexes
+
+# Disable server signature
+ServerSignature Off
+
+# --------------------------------------------------
+# FORCE HTTPS
+# --------------------------------------------------
+<IfModule mod_rewrite.c>
+RewriteEngine On
+
+RewriteCond %{HTTP:X-Forwarded-Proto} !https
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# --------------------------------------------------
+# WWW TO NON-WWW REDIRECT
+# --------------------------------------------------
+<IfModule mod_rewrite.c>
+RewriteCond %{HTTP_HOST} ^www\.(.+)$ [NC]
+RewriteRule ^ http://%1%{REQUEST_URI} [L,R=301]
+</IfModule>
+
+# --------------------------------------------------
+# PROTECT SENSITIVE FILES
+# --------------------------------------------------
+<FilesMatch "(^|/)(wp-config\.php|php\.ini|error_log|debug\.log|\.htaccess|\.htpasswd|readme\.html|license\.txt|composer\.(json|lock)|package\.json|package-lock\.json|yarn\.lock|web\.config)">
+    Require all denied
+</FilesMatch>
+
+# Extra direct protection for wp-config.php
+<Files wp-config.php>
+    Require all denied
+</Files>
+
+# Block backup / log / temp / config files
+<FilesMatch "\.(bak|config|sql|fla|psd|ini|log|sh|inc|swp|dist|old|save|tmp)$">
+    Require all denied
+</FilesMatch>
+
+# --------------------------------------------------
+# DISABLE XML-RPC
+# --------------------------------------------------
+<Files xmlrpc.php>
+    Require all denied
+</Files>
+
+# --------------------------------------------------
+# BLOCK COMMON SUSPICIOUS PHP FILENAMES
+# --------------------------------------------------
+<FilesMatch "(eval|base64|shell|exec)\.php">
+    Require all denied
+</FilesMatch>
+
+# --------------------------------------------------
+# SECURITY HEADERS
+# --------------------------------------------------
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    Header always set X-XSS-Protection "1; mode=block"
+</IfModule>
+
+# --------------------------------------------------
+# BLOCK DIRECT ACCESS TO CORE / SENSITIVE FILES
+# --------------------------------------------------
+<IfModule mod_rewrite.c>
+
+# Protect wp-admin includes
+RewriteRule ^wp-admin/includes/ - [F,L]
+
+# Protect wp-includes PHP files directly
+RewriteRule !^wp-includes/ - [S=3]
+RewriteRule ^wp-includes/[^/]+\.php$ - [F,L]
+RewriteRule ^wp-includes/js/tinymce/langs/.+\.php - [F,L]
+RewriteRule ^wp-includes/theme-compat/ - [F,L]
+
+# Block direct access to install/setup files
+RewriteRule ^wp-admin/install\.php$ - [F,L]
+RewriteRule ^wp-admin/setup-config\.php$ - [F,L]
+
+# Block author scans
+RewriteCond %{QUERY_STRING} author=\d [NC]
+RewriteRule ^ /? [L,R=301]
+
+# Block suspicious PHP execution in uploads
+RewriteRule ^wp-content/uploads/.*\.(php|php[0-9]?|phtml|phar)$ - [F,L,NC]
+
+# Block suspicious PHP execution in cache
+RewriteRule ^wp-content/cache/.*\.(php|php[0-9]?|phtml|phar)$ - [F,L,NC]
+
+# Block suspicious PHP execution in upgrade
+RewriteRule ^wp-content/upgrade/.*\.(php|php[0-9]?|phtml|phar)$ - [F,L,NC]
+
+# Block access to hidden files
+RewriteRule "(^|/)\." - [F,L]
+
+</IfModule>
+
+# --------------------------------------------------
+# BASIC CORS FOR FONTS / IMAGES
+# --------------------------------------------------
+<IfModule mod_setenvif.c>
+    <IfModule mod_headers.c>
+        <FilesMatch "\.(gif|png|jpe?g|svg|svgz|ico|webp)$">
+            SetEnvIf Origin ":" IS_CORS
+            Header set Access-Control-Allow-Origin "*" env=IS_CORS
+        </FilesMatch>
+    </IfModule>
+</IfModule>
+
+<IfModule mod_headers.c>
+    <FilesMatch "\.(ttf|ttc|otf|eot|woff|woff2|css|js)$">
+        Header set Access-Control-Allow-Origin "*"
+    </FilesMatch>
+</IfModule>
+
+
+2) Uploads folder .htaccess rules
+If the .htaccess file is not available inside the /uploads/ folder, please create a new file named .htaccess and add the code below.
+
+# SGS Directory Hardening
+<FilesMatch "\.(?i:php)$">
+  <IfModule !mod_authz_core.c>
+    Order allow,deny
+    Deny from all
+  </IfModule>
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>
+
+# SGS Directory Hardening END
+# Security hardening: Prevent PHP execution to avoid malware exploitation
+<FilesMatch ".php$">
+Require all denied
+</FilesMatch>
+
+3) Plugins folder .htaccess rules
+If the .htaccess file is not available inside the /plugins/ folder, please create a new file named .htaccess and add the code below.
+
+# Disable directory browsing
+Options -Indexes
+
+# Block access to backup / temp / log files
+<FilesMatch "\.(bak|config|sql|fla|psd|ini|log|sh|inc|swp|dist|old|save|tmp)$">
+    Require all denied
+</FilesMatch>
+
+# Block hidden files
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Block direct access to common suspicious filenames
+<FilesMatch "(eval|base64|shell|exec)\.php">
+    Require all denied
+</FilesMatch>
+
+4) Must-Use Plugin Folder & .htaccess Rules
+Please refere this link: https://github.com/gwsdev/website-security
+
+
+
+
