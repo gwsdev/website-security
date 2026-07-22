@@ -1,0 +1,84 @@
+# ==============================================================================
+# PLUGINS .htaccess  —  wp-content/plugins/.htaccess
+# ------------------------------------------------------------------------------
+# Purpose: Plugin PHP files are meant to be loaded BY WordPress, not
+# requested directly from a browser. Direct requests are how attackers
+# probe for vulnerable plugin files and trigger exploits.
+#
+# IMPORTANT — READ BEFORE DEPLOYING:
+# Blocking direct PHP access is safe for the vast majority of plugins
+# (Elementor, WooCommerce, ACF, Yoast, etc. never need it). A small number
+# of plugins DO serve PHP endpoints directly (some download managers,
+# payment gateway callbacks/IPN listeners, certain sliders). After
+# deploying, test checkout, payment webhooks, and file downloads.
+# If something breaks, whitelist that one file in Section 2 rather than
+# removing this protection.
+# ==============================================================================
+
+
+# ==============================================================================
+# 1. FOLDER HYGIENE
+# ==============================================================================
+
+# Prevent browsing of the plugin list (hides which plugins/versions you run)
+Options -Indexes
+
+# No CGI execution or server-side includes
+Options -ExecCGI -Includes
+
+# Block hidden files (.git folders shipped inside plugins, .env, etc.)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule (^\.|/\.) - [F,L]
+</IfModule>
+
+
+# ==============================================================================
+# 2. BLOCK DIRECT ACCESS TO PLUGIN PHP FILES
+# ------------------------------------------------------------------------------
+# WordPress loads plugins internally via include(), which this does NOT
+# affect. Only direct browser/bot requests like
+#   /wp-content/plugins/some-plugin/file.php
+# are denied. Plugin functionality, AJAX (admin-ajax.php), REST API,
+# Elementor editing, and WooCommerce all continue to work because they
+# route through WordPress core, not through direct plugin file requests.
+# ==============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # --- WHITELIST: add plugin files that genuinely need direct access ---
+    # Example (payment gateway IPN listener):
+    # RewriteRule ^example-gateway/ipn-listener\.php$ - [L]
+
+    # Deny direct requests to any PHP file in the plugins tree
+    RewriteRule \.(php[0-9]?|phtml|phar)$ - [F,L,NC]
+</IfModule>
+
+
+# ==============================================================================
+# 3. HIDE PLUGIN METADATA & LEFTOVER FILES
+# ------------------------------------------------------------------------------
+# readme.txt files disclose exact plugin versions, letting attackers match
+# your site against known CVEs. Logs/backups inside plugin folders leak data.
+# ==============================================================================
+
+<FilesMatch "^(readme|changelog|license|licence)\.(txt|md|html?)$">
+    Require all denied
+</FilesMatch>
+
+<FilesMatch "\.(log|sql|bak|backup|old|orig|save|swp|tmp|dist|lock)$">
+    Require all denied
+</FilesMatch>
+
+
+# ==============================================================================
+# 4. SAFE CONTENT HANDLING FOR STATIC PLUGIN ASSETS
+# ------------------------------------------------------------------------------
+# CSS, JS, images, and fonts inside plugins remain fully accessible —
+# nothing above touches them, so front-end styling and scripts load normally.
+# ==============================================================================
+
+<IfModule mod_headers.c>
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>
