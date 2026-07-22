@@ -1,0 +1,70 @@
+# ==============================================================================
+# UPLOADS .htaccess  —  wp-content/uploads/.htaccess
+# ------------------------------------------------------------------------------
+# Purpose: The uploads folder must serve STATIC media only. Nothing here
+# should ever execute. This is the single most important malware defense:
+# even if an attacker manages to upload a PHP shell, it cannot run.
+#
+# Safe for: media library, Elementor CSS/JSON assets, WooCommerce product
+# images and downloadable files, font uploads, generated thumbnails.
+# None of these require script execution.
+# ==============================================================================
+
+
+# ==============================================================================
+# 1. KILL ALL SCRIPT EXECUTION
+# ==============================================================================
+
+# Deny any request for server-side script files by extension.
+# Covers PHP variants, Phar archives, CGI, Perl, Python, shell, ASP, JSP.
+<FilesMatch "\.(php[0-9]?|phtml|phar|pht|cgi|pl|py|sh|bash|exe|dll|jsp|asp|aspx)$">
+    Require all denied
+</FilesMatch>
+
+# Also catch DOUBLE-EXTENSION tricks like shell.php.jpg or backdoor.phtml.png.
+# Matches ".php" (or variants) anywhere in the filename, not just at the end.
+<FilesMatch "\.(php[0-9]?|phtml|phar|pht)\.">
+    Require all denied
+</FilesMatch>
+
+# Belt-and-suspenders: even if a request slips through, strip the PHP
+# handler so Apache treats the file as plain text instead of executing it.
+<IfModule mod_php.c>
+    php_flag engine off
+</IfModule>
+RemoveHandler .php .phtml .php3 .php4 .php5 .php7 .php8 .phar
+RemoveType    .php .phtml .php3 .php4 .php5 .php7 .php8 .phar
+
+
+# ==============================================================================
+# 2. FOLDER HYGIENE
+# ==============================================================================
+
+# No directory listing of uploaded files
+Options -Indexes
+
+# No CGI execution and no server-side includes inside uploads
+Options -ExecCGI -Includes
+
+# Block any hidden files that end up in uploads (.htaccess copies, .env, etc.)
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+# Block HTML/SVG-adjacent files that can carry stored-XSS payloads when
+# uploaded by attackers. SVG is intentionally NOT blocked here because many
+# themes/plugins legitimately serve SVG logos/icons — if your site does not
+# use SVG uploads, add "svg|svgz" to the pattern below for extra protection.
+<FilesMatch "\.(html?|shtml|xhtml)$">
+    Require all denied
+</FilesMatch>
+
+
+# ==============================================================================
+# 3. FORCE SAFE CONTENT HANDLING
+# ==============================================================================
+
+<IfModule mod_headers.c>
+    # Prevent browsers from MIME-sniffing uploads into something executable
+    Header always set X-Content-Type-Options "nosniff"
+</IfModule>
