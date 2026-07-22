@@ -1,0 +1,221 @@
+# ==============================================================================
+# ROOT .htaccess  —  public_html/.htaccess
+# WordPress Security Hardening | Apache 2.4+ | No deprecated directives
+# ------------------------------------------------------------------------------
+# HOW TO USE:
+#   1. Back up your current .htaccess first.
+#   2. Place the security sections ABOVE the "# BEGIN WordPress" block.
+#   3. Never edit inside BEGIN/END WordPress — WP rewrites that block on save.
+# ==============================================================================
+
+
+# ==============================================================================
+# 1. SERVER HYGIENE
+# ==============================================================================
+
+# Disable directory listing site-wide (prevents browsing folder contents)
+Options -Indexes
+
+# Prevent Apache from following symlinks created by attackers,
+# while still allowing WordPress rewrites to work
+Options +SymLinksIfOwnerMatch
+
+# Hide Apache version/OS details in error pages (if allowed by host)
+ServerSignature Off
+
+# Disable TRACE/TRACK methods (mitigates cross-site tracing attacks)
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_METHOD} ^(TRACE|TRACK)$ [NC]
+    RewriteRule .* - [F,L]
+</IfModule>
+
+
+# ==============================================================================
+# 2. PROTECT SENSITIVE WORDPRESS FILES
+# ==============================================================================
+
+# Block access to wp-config.php (contains DB credentials & salts)
+<Files wp-config.php>
+    Require all denied
+</Files>
+
+# Block access to this .htaccess and any .htpasswd files
+<FilesMatch "^\.ht">
+    Require all denied
+</FilesMatch>
+
+# Block xmlrpc.php — a top brute-force & DDoS amplification target.
+# NOTE: Comment this block out if you use Jetpack, the WP mobile app,
+# or a remote publishing tool that requires XML-RPC.
+<Files xmlrpc.php>
+    Require all denied
+</Files>
+
+# Block direct access to the WP installer/upgrade scripts left on disk
+<FilesMatch "^(wp-config-sample\.php|install\.php|upgrade\.php)$">
+    Require all denied
+</FilesMatch>
+
+# Block version-disclosure files attackers fingerprint
+<FilesMatch "^(readme\.html|license\.txt|changelog\.txt|readme\.txt)$">
+    Require all denied
+</FilesMatch>
+
+
+# ==============================================================================
+# 3. BLOCK HIDDEN FILES & DIRECTORIES  (.env, .git, .svn, etc.)
+# ==============================================================================
+
+# Deny any file or directory that starts with a dot,
+# except the ACME challenge folder used for SSL certificate renewal
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/ [NC]
+    RewriteRule (^\.|/\.) - [F,L]
+</IfModule>
+
+
+# ==============================================================================
+# 4. PROTECT CONFIG, BACKUP, LOG & DATABASE DUMP FILES
+# ==============================================================================
+
+# Deny common backup/config/dump extensions anywhere on the site.
+# These are frequently left behind by plugins, hosts, and manual edits.
+<FilesMatch "\.(bak|backup|old|orig|original|save|swp|swo|tmp|temp|sql|sqlite|tar|tgz|gz(ip)?|bz2|7z|ini|log|conf|cnf|dist|inc|env|sh|yml|yaml|lock)$">
+    Require all denied
+</FilesMatch>
+
+# Deny copies of wp-config saved under any name (wp-config.php.bak, etc.)
+<FilesMatch "^wp-config\.">
+    Require all denied
+</FilesMatch>
+
+# Deny WordPress debug log explicitly (path: wp-content/debug.log)
+<Files "debug.log">
+    Require all denied
+</Files>
+
+# Deny error_log files created by PHP
+<Files "error_log">
+    Require all denied
+</Files>
+
+
+# ==============================================================================
+# 5. BLOCK PHP EXECUTION WHERE IT SHOULD NEVER RUN
+# ==============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # No direct PHP execution inside uploads (defense-in-depth;
+    # also enforced by wp-content/uploads/.htaccess)
+    RewriteRule ^wp-content/uploads/.*\.(php[0-9]?|phtml|phar)$ - [F,L,NC]
+
+    # Block direct access to PHP files inside wp-includes,
+    # EXCEPT ms-files.php (required only by legacy multisite)
+    RewriteRule ^wp-includes/[^/]+\.php$ - [F,L,NC]
+    RewriteRule ^wp-includes/js/tinymce/langs/.+\.php - [F,L,NC]
+    RewriteRule ^wp-includes/theme-compat/ - [F,L,NC]
+
+    # Block PHP execution in wp-content/cache and wp-content/backups
+    RewriteRule ^wp-content/(cache|backups?|upgrade)/.*\.(php[0-9]?|phtml|phar)$ - [F,L,NC]
+</IfModule>
+
+
+# ==============================================================================
+# 6. QUERY-STRING ATTACK FILTERING (injection / LFI / RFI patterns)
+# ------------------------------------------------------------------------------
+# Conservative set — chosen to avoid false positives with WooCommerce,
+# Elementor, AJAX, and the REST API. Each pattern matches only strings
+# that have no legitimate use in a normal WordPress request.
+# ==============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # PHP superglobal injection attempts in the query string
+    RewriteCond %{QUERY_STRING} (globals|_request|_get|_post)(=|\[|%5B).*(\.\.|%2e%2e) [NC,OR]
+
+    # Directory traversal (../ and encoded variants)
+    RewriteCond %{QUERY_STRING} (\.\./|\.\.%2f|%2e%2e%2f|%2e%2e/) [NC,OR]
+
+    # Remote file inclusion: http(s):// or ftp:// injected as a parameter VALUE
+    RewriteCond %{QUERY_STRING} =(https?|ftp)(:|%3a)(/|%2f)(/|%2f) [NC,OR]
+
+    # Null byte injection
+    RewriteCond %{QUERY_STRING} %00 [OR]
+
+    # Common code-execution payloads
+    RewriteCond %{QUERY_STRING} (base64_decode|gzinflate|eval\(|assert\(|system\(|passthru\(|shell_exec\() [NC,OR]
+
+    # Script-tag injection into query string
+    RewriteCond %{QUERY_STRING} (<|%3c)script(>|%3e) [NC]
+
+    RewriteRule .* - [F,L]
+</IfModule>
+
+
+# ==============================================================================
+# 7. BLOCK USER ENUMERATION
+# ------------------------------------------------------------------------------
+# Stops /?author=N scans used to harvest usernames for brute-force attacks.
+# Pretty-permalink author archives (/author/name/) continue to work.
+# ==============================================================================
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} ^/$
+    RewriteCond %{QUERY_STRING} ^author=\d+ [NC]
+    RewriteRule .* - [F,L]
+</IfModule>
+
+
+# ==============================================================================
+# 8. SECURITY HEADERS
+# ------------------------------------------------------------------------------
+# All headers use "always" so they are also sent on error responses.
+# ==============================================================================
+
+<IfModule mod_headers.c>
+    # Stop the site from being embedded in iframes on other domains (clickjacking)
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # Prevent MIME-type sniffing of responses
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Send only the origin as referrer to other sites
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Disable powerful browser features the site does not need
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(self)"
+
+    # Remove headers that disclose software versions
+    Header always unset X-Powered-By
+    Header always unset Server
+
+    # HSTS — force HTTPS for 1 year.
+    # ONLY enable after confirming the ENTIRE site (including subdomains
+    # if you add includeSubDomains) works over HTTPS. Uncomment to activate:
+    # Header always set Strict-Transport-Security "max-age=31536000"
+</IfModule>
+
+
+# ==============================================================================
+# 9. WORDPRESS CORE REWRITES — DO NOT EDIT
+# ------------------------------------------------------------------------------
+# Keep this block LAST. WordPress manages it automatically.
+# ==============================================================================
+
+# BEGIN WordPress
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /index.php [L]
+</IfModule>
+# END WordPress
